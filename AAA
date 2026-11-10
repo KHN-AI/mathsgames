@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌟 奇妙多邊形面積探索 🌟</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Varela+Round&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans TC', 'Varela Round', sans-serif;
+            background-color: #f0fdfa; /* light teal background */
+            touch-action: none; /* Prevent scroll while drawing on canvas */
+            overflow: hidden;
+        }
+        
+        .corkboard {
+            background-color: #fef3c7; /* amber-100 */
+            background-image: url('data:image/svg+xml,%3Csvg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"%3E%3Cpath d="M20 20.5V18H0v-2h20v-2H0v-2h20v-2H0V8h20V6H0V4h20V2H0V0h22v20h2V0h2v20h2V0h2v20h2V0h2v20h2V0h2v20h2v2H20v-1.5zM0 20h2v20H0V20zm4 0h2v20H4V20zm4 0h2v20H8V20zm4 0h2v20h-2V20zm4 0h2v20h-2V20zm4 4h20v2H20v-2zm0 4h20v2H20v-2zm0 4h20v2H20v-2zm0 4h20v2H20v-2z" fill="%23fde68a" fill-opacity="0.4" fill-rule="evenodd"/%3E%3C/svg%3E');
+            border: 12px solid #b45309; /* wooden frame */
+            border-radius: 16px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.1), 0 10px 25px rgba(0,0,0,0.2);
+        }
+ 
+        .bounce { animation: bounce 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes bounce {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+ 
+        .pulse-star { animation: pulse 1.5s infinite; }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+ 
+        /* Drag and Drop & Feedback styles */
+        .shape-element {
+            touch-action: none;
+            cursor: grab;
+            transition: transform 0.1s;
+        }
+        .shape-element:active {
+            cursor: grabbing;
+            transform: scale(1.05);
+        }
+        .blinking-error {
+            animation: blinker 1s linear infinite;
+        }
+        @keyframes blinker {
+            50% { opacity: 0.4; }
+        }
+ 
+        /* Scrollbar styling for panels */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col text-slate-800 selection:bg-teal-200">
+ 
+    <!-- Header -->
+    <header class="bg-teal-500 text-white p-3 shadow-md flex justify-between items-center shrink-0 z-50 relative">
+        <h1 class="text-2xl font-bold tracking-wider flex items-center gap-2">
+            <span>📐</span> 奇妙多邊形面積探索
+        </h1>
+        <div class="flex items-center gap-4 text-lg font-bold bg-teal-600 px-4 py-1 rounded-full shadow-inner">
+            <span>進度: <span id="level-display" class="text-yellow-300">1 / 8</span></span>
+        </div>
+    </header>
+ 
+    <!-- Main Content (Modified for Side-by-Side Layout) -->
+    <main class="flex-1 flex flex-col md:flex-row gap-4 p-4 overflow-hidden relative w-full max-w-[1600px] mx-auto">
+        
+        <!-- Canvas Area (Left, Larger portion) -->
+        <div class="flex-[5] flex flex-col relative h-full w-full">
+            <!-- Instruction Bubble -->
+            <div id="instruction-box" class="bg-white p-3 rounded-xl shadow-lg border-2 border-teal-200 mb-3 text-teal-800 font-bold text-lg flex items-center gap-3 z-40 shrink-0">
+                <span class="text-2xl">🦉</span>
+                <span id="instruction-text">試試看用「分割法」，在釘板上點擊圖釘畫出簡單的形狀吧！</span>
+            </div>
+            
+            <!-- Pinboard & Shape Layer -->
+            <div class="flex-1 w-full relative overflow-auto rounded-xl shadow-inner border border-slate-200" id="board-wrapper">
+                <div id="board-container" class="relative flex justify-center items-center min-w-full min-h-full m-auto origin-center">
+                    <canvas id="board-canvas" class="corkboard cursor-crosshair z-10 relative block"></canvas>
+                    
+                    <!-- Overlay for specific feedback -->
+                    <canvas id="feedback-canvas" class="absolute inset-0 m-auto pointer-events-none z-20 block" style="display: none;"></canvas>
+     
+                    <!-- Layer for dragged shapes -->
+                    <div id="shape-layer" class="absolute inset-0 m-auto pointer-events-none z-30">
+                        <!-- Shapes go here -->
+                    </div>
+                </div>
+            </div>
+ 
+            <div class="absolute bottom-2 right-2 flex gap-2 z-50">
+                <button onclick="clearCurrentDrawing()" class="bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-bold py-2 px-4 rounded-lg shadow border-2 border-yellow-500 active:scale-95 transition-transform pointer-events-auto">
+                    重新畫線
+                </button>
+                <button onclick="clearAllShapes()" class="bg-red-400 hover:bg-red-500 text-white font-bold py-2 px-4 rounded-lg shadow border-2 border-red-500 active:scale-95 transition-transform pointer-events-auto">
+                    清除全部形狀
+                </button>
+            </div>
+
+            <!-- Zoom Controls -->
+            <div class="absolute top-2 right-2 flex gap-2 z-50">
+                <button onclick="changeZoom(0.25)" class="bg-white hover:bg-teal-50 text-teal-700 w-12 h-12 rounded-full font-bold text-2xl shadow-lg border-2 border-teal-300 active:scale-90 transition-transform flex items-center justify-center pointer-events-auto">🔍+</button>
+                <button onclick="changeZoom(-0.25)" class="bg-white hover:bg-teal-50 text-teal-700 w-12 h-12 rounded-full font-bold text-2xl shadow-lg border-2 border-teal-300 active:scale-90 transition-transform flex items-center justify-center pointer-events-auto">🔍-</button>
+            </div>
+
+            <!-- Lock Screen Overlay -->
+            <div id="lock-screen" class="absolute inset-0 bg-teal-900/95 z-[100] flex-col items-center justify-center text-white hidden backdrop-blur-md rounded-xl">
+                <div class="text-6xl mb-4">🔒</div>
+                <h2 class="text-3xl font-bold mb-4 tracking-wider">關卡已鎖定</h2>
+                <p class="mb-6 text-teal-200 text-lg">請輸入老師提供的密碼來解鎖此題</p>
+                <div class="flex gap-3">
+                    <input type="password" id="level-password" class="text-slate-900 px-4 py-3 rounded-xl font-bold text-center w-40 text-xl shadow-inner focus:outline-none focus:ring-4 focus:ring-teal-400" placeholder="輸入密碼">
+                    <button onclick="unlockLevel()" class="bg-yellow-400 hover:bg-yellow-500 text-yellow-900 px-6 py-3 rounded-xl font-bold text-xl shadow-lg active:scale-95 transition-transform">解鎖</button>
+                </div>
+                <p id="lock-error" class="text-red-400 mt-4 font-bold text-lg hidden bg-red-900/50 px-4 py-2 rounded-lg">密碼錯誤，請再試一次！</p>
+            </div>
+        </div>
+        
+        <!-- Formula Builder (Right, Smaller portion) -->
+        <div class="flex-[2] bg-white border-4 border-teal-500 rounded-xl p-4 flex flex-col gap-4 shadow-lg relative z-50 overflow-y-auto min-w-[350px] max-w-[450px]">
+            <div class="font-bold text-xl text-teal-700 w-full mb-1">你的算式（點擊可切換列）：</div>
+            
+            <div id="formulas-container" class="flex flex-col gap-5 w-full flex-1">
+                <!-- Row 1 -->
+                <div class="flex flex-col gap-1">
+                    <div class="font-bold text-slate-600 whitespace-nowrap">算式 1：</div>
+                    <div id="formula-zone-0" onclick="setActiveRow(0)" class="formula-zone w-full min-h-[90px] bg-slate-50 rounded-xl border-2 border-dashed border-slate-300 p-2 flex items-center gap-2 overflow-x-auto relative cursor-pointer transition-colors">
+                        <div class="absolute bottom-1 left-0 right-0 text-center text-xs text-slate-400 pointer-events-none">將圖形或符號加到此列</div>
+                    </div>
+                </div>
+                <!-- Row 2 -->
+                <div class="flex flex-col gap-1">
+                    <div class="font-bold text-slate-600 whitespace-nowrap">算式 2：</div>
+                    <div id="formula-zone-1" onclick="setActiveRow(1)" class="formula-zone w-full min-h-[90px] bg-slate-50 rounded-xl border-2 border-dashed border-slate-300 p-2 flex items-center gap-2 overflow-x-auto relative cursor-pointer transition-colors">
+                        <div class="absolute bottom-1 left-0 right-0 text-center text-xs text-slate-400 pointer-events-none">將圖形或符號加到此列</div>
+                    </div>
+                </div>
+                <!-- Row 3 -->
+                <div class="flex flex-col gap-1">
+                    <div class="font-bold text-slate-600 whitespace-nowrap">算式 3：</div>
+                    <div id="formula-zone-2" onclick="setActiveRow(2)" class="formula-zone w-full min-h-[90px] bg-slate-50 rounded-xl border-2 border-dashed border-slate-300 p-2 flex items-center gap-2 overflow-x-auto relative cursor-pointer transition-colors">
+                        <div class="absolute bottom-1 left-0 right-0 text-center text-xs text-slate-400 pointer-events-none">將圖形或符號加到此列</div>
+                    </div>
+                </div>
+                <!-- Row 4 -->
+                <div class="flex flex-col gap-1">
+                    <div class="font-bold text-slate-600 whitespace-nowrap">算式 4：</div>
+                    <div id="formula-zone-3" onclick="setActiveRow(3)" class="formula-zone w-full min-h-[90px] bg-slate-50 rounded-xl border-2 border-dashed border-slate-300 p-2 flex items-center gap-2 overflow-x-auto relative cursor-pointer transition-colors">
+                        <div class="absolute bottom-1 left-0 right-0 text-center text-xs text-slate-400 pointer-events-none">將圖形或符號加到此列</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Operator & Number Controls (Moved from Left) -->
+            <div class="flex flex-wrap gap-2 justify-center py-3 mt-2 bg-slate-100 rounded-xl shadow-inner border border-slate-200">
+                <button onclick="addOperator('+')" class="bg-purple-100 hover:bg-purple-200 text-purple-700 w-12 h-12 rounded-full font-bold text-2xl shadow border-2 border-purple-300 active:scale-90 transition-transform flex items-center justify-center pointer-events-auto">+</button>
+                <button onclick="addOperator('-')" class="bg-pink-100 hover:bg-pink-200 text-pink-700 w-12 h-12 rounded-full font-bold text-2xl shadow border-2 border-pink-300 active:scale-90 transition-transform flex items-center justify-center pointer-events-auto">-</button>
+                <button onclick="addOperator('×')" class="bg-blue-100 hover:bg-blue-200 text-blue-700 w-12 h-12 rounded-full font-bold text-2xl shadow border-2 border-blue-300 active:scale-90 transition-transform flex items-center justify-center pointer-events-auto">×</button>
+                <div class="w-px bg-slate-300 mx-1 my-1"></div>
+                <button onclick="addOperator('2')" class="bg-white hover:bg-slate-200 text-slate-700 w-10 h-10 rounded-full font-bold text-xl shadow border-2 border-slate-300 active:scale-90 transition-transform flex items-center justify-center pointer-events-auto mt-1">2</button>
+                <button onclick="addOperator('3')" class="bg-white hover:bg-slate-200 text-slate-700 w-10 h-10 rounded-full font-bold text-xl shadow border-2 border-slate-300 active:scale-90 transition-transform flex items-center justify-center pointer-events-auto mt-1">3</button>
+                <button onclick="addOperator('4')" class="bg-white hover:bg-slate-200 text-slate-700 w-10 h-10 rounded-full font-bold text-xl shadow border-2 border-slate-300 active:scale-90 transition-transform flex items-center justify-center pointer-events-auto mt-1">4</button>
+                <button onclick="addOperator('5')" class="bg-white hover:bg-slate-200 text-slate-700 w-10 h-10 rounded-full font-bold text-xl shadow border-2 border-slate-300 active:scale-90 transition-transform flex items-center justify-center pointer-events-auto mt-1">5</button>
+            </div>
+            
+            <div class="flex justify-center mt-auto pt-4">
+                <button onclick="evaluateAllFormulas()" class="bg-green-500 hover:bg-green-600 text-white font-bold text-xl py-3 px-8 rounded-xl shadow-lg border-b-4 border-green-700 active:translate-y-1 active:border-b-0 transition-all w-full">
+                    檢查算式！
+                </button>
+            </div>
+        </div>
+ 
+    </main>
+ 
+    <!-- Modals (Feedback) -->
+    <div id="feedback-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm">
+        <div class="bg-white rounded-3xl p-8 max-w-sm w-full mx-4 shadow-2xl text-center transform transition-transform scale-95" id="feedback-content">
+            <div id="feedback-icon" class="text-6xl mb-4 pulse-star">⭐</div>
+            <h2 id="feedback-title" class="text-2xl font-bold mb-2">太棒了！</h2>
+            <p id="feedback-msg" class="text-lg text-slate-600 mb-6">你成功找出了這個圖形的面積！</p>
+            <button onclick="nextQuestion()" id="next-btn" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-xl w-full shadow-md text-lg">
+                下一題
+            </button>
+            <button onclick="closeModal()" id="retry-btn" class="hidden bg-orange-400 hover:bg-orange-500 text-white font-bold py-3 px-6 rounded-xl w-full shadow-md text-lg">
+                再試一次
+            </button>
+        </div>
+    </div>
+ 
+    <script>
+        // --- Game Data & Configuration ---
+        const GRID_SIZE = 12; // 12x12 grid
+        let UNIT = 40; // Pixels per unit spacing
+        const PADDING = 40; // Canvas padding
+ 
+        // Primary 5 questions: Target Polygons (Grid coordinates)
+        const questions = [
+            // Q1: L-Shape (Splitting is obvious) - Area = 12
+            {
+               vertices: [{x:3, y:3}, {x:3, y:7}, {x:5, y:7}, {x:5, y:5}, {x:7, y:5}, {x:7, y:3}],
+               instruction: "第 1 題：試試看用「分割法」，把它切成兩個長方形吧！",
+               expectedArea: 12
+            },
+            // Q2: U-shape (Filling makes it easier) - Area = 24
+            {
+               vertices: [{x:2, y:2}, {x:2, y:7}, {x:8, y:7}, {x:8, y:2}, {x:6, y:2}, {x:6, y:5}, {x:4, y:5}, {x:4, y:2}],
+               instruction: "第 2 題：有缺口的圖形，試試看用「填補法」，先畫一個大長方形！",
+               expectedArea: 24
+            },
+            // Q3: Multiple ways (Cross) - Area = 20
+            {
+               vertices: [{x:4,y:2}, {x:4,y:4}, {x:2,y:4}, {x:2,y:6}, {x:4,y:6}, {x:4,y:8}, {x:6,y:8}, {x:6,y:6}, {x:8,y:6}, {x:8,y:4}, {x:6,y:4}, {x:6,y:2}],
+               instruction: "第 3 題：這是一個十字形！你可以用「分割法」或「填補法」來挑戰喔！",
+               expectedArea: 20
+            },
+            // Q4: Multiple ways (Irregular hexagon) - Area = 23
+            {
+               vertices: [{x:2,y:2}, {x:2,y:6}, {x:5,y:8}, {x:8,y:6}, {x:8,y:4}, {x:5,y:2}],
+               instruction: "第 4 題：形狀越來越奇妙了！用你喜歡的方法來解題吧！",
+               expectedArea: 23 
+            },
+            // Q5: Multiple ways (Rocket) - Area = 16
+            {
+               vertices: [{x:4,y:2}, {x:2,y:4}, {x:4,y:4}, {x:4,y:7}, {x:3,y:8}, {x:7,y:8}, {x:6,y:7}, {x:6,y:4}, {x:8,y:4}, {x:6,y:2}],
+               instruction: "第 5 題：這像一台火箭！加加減減算出面積吧！",
+               expectedArea: 16 
+            }
+        ];
+ 
+        const SHAPE_COLORS = [
+            'rgba(239, 68, 68, 0.4)',  // Red
+            'rgba(59, 130, 246, 0.4)', // Blue
+            'rgba(16, 185, 129, 0.4)', // Green
+            'rgba(139, 92, 246, 0.4)', // Purple
+            'rgba(245, 158, 11, 0.4)', // Amber
+            'rgba(236, 72, 153, 0.4)'  // Pink
+        ];
+ 
+        // --- State ---
+        const NUM_FORMULA_ROWS = 4; // 增至4欄算式
+        let currentQuestionIndex = 0;
+        let canvas, ctx;
+        let feedbackCanvas, fCtx;
+        let createdShapes = []; // Array of { id, vertices, color, area, domElement }
+        let currentDrawing = []; // Array of points {x, y}
+        let mousePos = {x: 0, y: 0};
+        
+        let formulas = [[], [], [], []]; // Array of 4 formula rows
+        let activeRow = 0;
+        
+        let shapeCounter = 0;
+        let zoomLevel = 1; // 畫板縮放比例
+        
+        let unlockedLevels = [true, false, false, false, false, false]; // Q1 unlocked by default
+        
+        // Dragging state
+        let draggingElement = null;
+        let dragOffset = {x: 0, y: 0};
+ 
+        // --- Initialization ---
+        window.onload = () => {
+            canvas = document.getElementById('board-canvas');
+            ctx = canvas.getContext('2d');
+            
+            feedbackCanvas = document.getElementById('feedback-canvas');
+            fCtx = feedbackCanvas.getContext('2d');
+            
+            // Adjust canvas size to fit container
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Interaction events
+            canvas.addEventListener('mousedown', handlePointerDown);
+            canvas.addEventListener('mousemove', handlePointerMove);
+            canvas.addEventListener('touchstart', handlePointerDown, {passive: false});
+            canvas.addEventListener('touchmove', handlePointerMove, {passive: false});
+            
+            loadQuestion();
+            requestAnimationFrame(drawLoop);
+        };
+ 
+        function resizeCanvas() {
+            const wrapper = document.getElementById('board-wrapper');
+            const baseSize = Math.min(wrapper.clientWidth, wrapper.clientHeight) - 20;
+            const size = baseSize * zoomLevel;
+            
+            canvas.width = size;
+            canvas.height = size;
+            feedbackCanvas.width = size;
+            feedbackCanvas.height = size;
+            
+            const container = document.getElementById('board-container');
+            container.style.width = Math.max(wrapper.clientWidth, size + 40) + 'px';
+            container.style.height = Math.max(wrapper.clientHeight, size + 40) + 'px';
+            
+            const shapeLayer = document.getElementById('shape-layer');
+            shapeLayer.style.width = size + 'px';
+            shapeLayer.style.height = size + 'px';
+            shapeLayer.style.left = '50%';
+            shapeLayer.style.top = '50%';
+            shapeLayer.style.transform = 'translate(-50%, -50%)';
+
+            canvas.style.position = 'absolute';
+            canvas.style.left = '50%';
+            canvas.style.top = '50%';
+            canvas.style.transform = 'translate(-50%, -50%)';
+
+            feedbackCanvas.style.position = 'absolute';
+            feedbackCanvas.style.left = '50%';
+            feedbackCanvas.style.top = '50%';
+            feedbackCanvas.style.transform = 'translate(-50%, -50%)';
+
+            UNIT = (size - PADDING * 2) / (GRID_SIZE - 1);
+            
+            if (typeof rebuildAllShapesDOM === 'function') rebuildAllShapesDOM();
+        }
+
+        function changeZoom(delta) {
+            zoomLevel += delta;
+            zoomLevel = Math.max(1, Math.min(3, zoomLevel)); // 限制在 1x ~ 3x 縮放
+            resizeCanvas();
+        }
+        
+        function rebuildAllShapesDOM() {
+            createdShapes.forEach(shape => {
+                if (shape.domElement && shape.domElement.parentNode && shape.domElement.parentNode.id === 'shape-layer') {
+                    const bbox = getBoundingBox(shape.vertices);
+                    shape.domElement.style.left = bbox.minX + 'px';
+                    shape.domElement.style.top = bbox.minY + 'px';
+                    shape.domElement.style.width = bbox.w + 'px';
+                    shape.domElement.style.height = bbox.h + 'px';
+                    
+                    const pointsStr = shape.vertices.map(v => {
+                        const pt = getCanvasCoords(v);
+                        return `${pt.x - bbox.minX},${pt.y - bbox.minY}`;
+                    }).join(' ');
+                    
+                    const svgBox = shape.domElement.querySelector('svg');
+                    if (svgBox) {
+                        svgBox.setAttribute('viewBox', `0 0 ${bbox.w} ${bbox.h}`);
+                        const polygon = svgBox.querySelector('polygon');
+                        if (polygon) polygon.setAttribute('points', pointsStr);
+                    }
+                }
+            });
+        }
+ 
+        function loadQuestion() {
+            if(currentQuestionIndex >= questions.length) {
+                // Game Finished
+                document.getElementById('instruction-text').innerText = "🎉 恭喜你完成所有挑戰！你真是面積計算大師！";
+                document.getElementById('level-display').innerText = "完成";
+                
+                // Clear shapes and hide interactive areas
+                formulas = [[], [], [], []];
+                clearAllShapes();
+                document.getElementById('board-wrapper').style.display = 'none';
+                document.getElementById('formulas-container').parentElement.style.display = 'none';
+                return;
+            }
+            
+            const q = questions[currentQuestionIndex];
+            document.getElementById('instruction-text').innerText = q.instruction;
+            document.getElementById('level-display').innerText = `${currentQuestionIndex + 1} / ${questions.length}`;
+            
+            // Calculate exact expected area to be safe
+            q.expectedArea = calculatePolygonArea(q.vertices);
+ 
+            formulas = [[], [], [], []];
+            clearAllShapes();
+            zoomLevel = 1; // 換題時重設縮放
+            
+            // Lock Check
+            const lockScreen = document.getElementById('lock-screen');
+            if (!unlockedLevels[currentQuestionIndex]) {
+                lockScreen.classList.remove('hidden');
+                lockScreen.classList.add('flex');
+                document.getElementById('level-password').value = '';
+                document.getElementById('lock-error').classList.add('hidden');
+            } else {
+                lockScreen.classList.add('hidden');
+                lockScreen.classList.remove('flex');
+            }
+        }
+
+        function unlockLevel() {
+            const input = document.getElementById('level-password').value;
+            // 每一題的密碼有規律：為該題號重複4次（例如第2題密碼為 "2222"，第3題為 "3333"），另保留萬用密碼 "8888"
+            const expectedPassword = String(currentQuestionIndex + 1).repeat(4);
+            
+            if (input === expectedPassword || input === "8888") { 
+                unlockedLevels[currentQuestionIndex] = true;
+                const lockScreen = document.getElementById('lock-screen');
+                lockScreen.classList.add('hidden');
+                lockScreen.classList.remove('flex');
+            } else {
+                document.getElementById('lock-error').classList.remove('hidden');
+            }
+        }
+ 
+        // --- Core Logic & Math ---
+        function calculatePolygonArea(vertices) {
+            let area = 0;
+            for (let i = 0; i < vertices.length; i++) {
+                let j = (i + 1) % vertices.length;
+                area += vertices[i].x * vertices[j].y;
+                area -= vertices[j].x * vertices[i].y;
+            }
+            return Math.abs(area / 2);
+        }
+ 
+        // Checks if a 4-vertex polygon is a rectangle
+        function isRectangle(vertices) {
+            if (vertices.length !== 4) return false;
+            for (let i = 0; i < 4; i++) {
+                let p1 = vertices[i];
+                let p2 = vertices[(i + 1) % 4];
+                let p3 = vertices[(i + 2) % 4];
+                let v1 = { x: p1.x - p2.x, y: p1.y - p2.y };
+                let v2 = { x: p3.x - p2.x, y: p3.y - p2.y };
+                // Dot product of adjacent edge vectors == 0 means right angle
+                if (v1.x * v2.x + v1.y * v2.y !== 0) return false;
+            }
+            return true;
+        }
+ 
+        function getCanvasCoords(gridPoint) {
+            return {
+                x: PADDING + gridPoint.x * UNIT,
+                y: canvas.height - (PADDING + gridPoint.y * UNIT) // Invert Y for standard math coordinates
+            };
+        }
+ 
+        function getGridCoords(canvasX, canvasY) {
+            const gridX = Math.round((canvasX - PADDING) / UNIT);
+            const gridY = Math.round((canvas.height - canvasY - PADDING) / UNIT);
+            return {x: gridX, y: gridY};
+        }
+ 
+        // --- Input Handling ---
+        function handlePointerDown(e) {
+            if(e.type === 'touchstart') e.preventDefault(); // Prevent scrolling
+            
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            const canvasX = (clientX - rect.left) * (canvas.width / rect.width);
+            const canvasY = (clientY - rect.top) * (canvas.height / rect.height);
+            
+            const gridPoint = getGridCoords(canvasX, canvasY);
+            
+            // Check if valid grid point
+            if (gridPoint.x >= 0 && gridPoint.x < GRID_SIZE && gridPoint.y >= 0 && gridPoint.y < GRID_SIZE) {
+                
+                // If closing the shape
+                if (currentDrawing.length > 2) {
+                    const firstPt = currentDrawing[0];
+                    if (firstPt.x === gridPoint.x && firstPt.y === gridPoint.y) {
+                        finishShape();
+                        return;
+                    }
+                }
+                
+                // Avoid adding the exact same point consecutively
+                if (currentDrawing.length > 0) {
+                    const lastPt = currentDrawing[currentDrawing.length - 1];
+                    if (lastPt.x === gridPoint.x && lastPt.y === gridPoint.y) return;
+                }
+ 
+                currentDrawing.push(gridPoint);
+            }
+        }
+ 
+        function handlePointerMove(e) {
+            if(e.type === 'touchmove') e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            mousePos = {
+                x: (clientX - rect.left) * (canvas.width / rect.width),
+                y: (clientY - rect.top) * (canvas.height / rect.height)
+            };
+        }
+ 
+        function finishShape() {
+            if (currentDrawing.length < 3) {
+                currentDrawing = [];
+                return;
+            }
+ 
+            const area = calculatePolygonArea(currentDrawing);
+            if (area === 0) {
+                currentDrawing = [];
+                return;
+            }
+ 
+            const newShape = {
+                id: 'shape_' + shapeCounter++,
+                vertices: [...currentDrawing],
+                color: SHAPE_COLORS[createdShapes.length % SHAPE_COLORS.length],
+                area: area
+            };
+ 
+            createdShapes.push(newShape);
+            currentDrawing = [];
+            
+            createDraggableShapeDOM(newShape);
+        }
+ 
+        function clearCurrentDrawing() {
+            currentDrawing = [];
+        }
+ 
+        function clearAllShapes() {
+            // 過濾並找出已經放入算式區的形狀 ID
+            const shapesInFormulas = new Set();
+            formulas.forEach(row => {
+                row.forEach(item => {
+                    if (item.type === 'shape') {
+                        shapesInFormulas.add(item.shapeId);
+                    }
+                });
+            });
+
+            // 僅刪除「未放入算式區」的圖形
+            createdShapes = createdShapes.filter(shape => {
+                if (shapesInFormulas.has(shape.id)) {
+                    return true; // 保留
+                } else {
+                    if (shape.domElement && shape.domElement.parentNode) {
+                        shape.domElement.parentNode.removeChild(shape.domElement);
+                    }
+                    return false; // 移除
+                }
+            });
+            
+            currentDrawing = [];
+            
+            document.getElementById('feedback-canvas').style.display = 'none';
+            renderFormulaZones();
+        }
+ 
+        // --- Drawing Loop ---
+        function drawLoop() {
+            if (!ctx) return;
+            
+            // Clear
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw Grid lines
+            ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+            ctx.lineWidth = 1;
+            for(let i=0; i<GRID_SIZE; i++) {
+                // Vertical
+                ctx.beginPath();
+                ctx.moveTo(PADDING + i*UNIT, PADDING);
+                ctx.lineTo(PADDING + i*UNIT, canvas.height - PADDING);
+                ctx.stroke();
+                // Horizontal
+                ctx.beginPath();
+                ctx.moveTo(PADDING, PADDING + i*UNIT);
+                ctx.lineTo(canvas.width - PADDING, PADDING + i*UNIT);
+                ctx.stroke();
+            }
+ 
+            // Draw Target Polygon
+            if (questions[currentQuestionIndex]) {
+                const targetVertices = questions[currentQuestionIndex].vertices;
+                drawPolygon(targetVertices, 'rgba(253, 224, 71, 0.5)', '#eab308', 3, true);
+            }
+ 
+            // Draw Created Shapes
+            createdShapes.forEach(shape => {
+                if (shape.domElement && shape.domElement.parentNode && shape.domElement.parentNode.id.startsWith('formula-zone')) {
+                    return; // 已經放入算式的圖形，不再畫布上繪製
+                }
+                drawPolygon(shape.vertices, shape.color, shape.color.replace('0.4', '1'), 2, false);
+            });
+ 
+            // Draw Grid Pins
+            ctx.fillStyle = '#64748b'; // slate-500
+            for(let x=0; x<GRID_SIZE; x++) {
+                for(let y=0; y<GRID_SIZE; y++) {
+                    const pt = getCanvasCoords({x, y});
+                    ctx.beginPath();
+                    ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+ 
+            // Draw Current Drawing line
+            if (currentDrawing.length > 0) {
+                ctx.beginPath();
+                ctx.strokeStyle = '#3b82f6'; // blue-500
+                ctx.lineWidth = 4;
+                ctx.setLineDash([8, 8]);
+                
+                const startPt = getCanvasCoords(currentDrawing[0]);
+                ctx.moveTo(startPt.x, startPt.y);
+                
+                for(let i=1; i<currentDrawing.length; i++) {
+                    const pt = getCanvasCoords(currentDrawing[i]);
+                    ctx.lineTo(pt.x, pt.y);
+                }
+                
+                // Line to mouse cursor
+                ctx.lineTo(mousePos.x, mousePos.y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                // Highlight first point if close enough to close shape
+                if (currentDrawing.length > 2) {
+                    const firstPt = getCanvasCoords(currentDrawing[0]);
+                    const dist = Math.hypot(firstPt.x - mousePos.x, firstPt.y - mousePos.y);
+                    if (dist < 30) {
+                        ctx.beginPath();
+                        ctx.arc(firstPt.x, firstPt.y, 10, 0, Math.PI*2);
+                        ctx.fillStyle = 'rgba(59, 130, 246, 0.5)';
+                        ctx.fill();
+                        ctx.strokeStyle = '#3b82f6';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    }
+                }
+                
+                // Draw dots for current drawing
+                ctx.fillStyle = '#1d4ed8'; // blue-700
+                currentDrawing.forEach(ptGrid => {
+                    const pt = getCanvasCoords(ptGrid);
+                    ctx.beginPath();
+                    ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+ 
+            requestAnimationFrame(drawLoop);
+        }
+ 
+        function drawPolygon(vertices, fillColor, strokeColor, lineWidth, drawDashed) {
+            if (!vertices || vertices.length === 0) return;
+            
+            ctx.beginPath();
+            const startPt = getCanvasCoords(vertices[0]);
+            ctx.moveTo(startPt.x, startPt.y);
+            
+            for(let i=1; i<vertices.length; i++) {
+                const pt = getCanvasCoords(vertices[i]);
+                ctx.lineTo(pt.x, pt.y);
+            }
+            ctx.closePath();
+            
+            ctx.fillStyle = fillColor;
+            ctx.fill();
+            
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = lineWidth;
+            if(drawDashed) {
+                ctx.setLineDash([5, 5]);
+            } else {
+                ctx.setLineDash([]);
+            }
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset
+        }
+ 
+        // --- DOM Generation for Shapes & Formula ---
+        function getBoundingBox(vertices) {
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            vertices.forEach(v => {
+                const pt = getCanvasCoords(v);
+                if(pt.x < minX) minX = pt.x;
+                if(pt.x > maxX) maxX = pt.x;
+                if(pt.y < minY) minY = pt.y;
+                if(pt.y > maxY) maxY = pt.y;
+            });
+            // Ensure tiny shapes have some volume
+            return { minX, maxX, minY, maxY, w: Math.max(maxX - minX, 10), h: Math.max(maxY - minY, 10) };
+        }
+ 
+        function createDraggableShapeDOM(shape) {
+            const bbox = getBoundingBox(shape.vertices);
+            
+            const el = document.createElement('div');
+            el.id = shape.id;
+            el.className = 'shape-element pointer-events-auto absolute flex items-center justify-center';
+            
+            // Position exactly over the canvas drawing
+            el.style.left = bbox.minX + 'px';
+            el.style.top = bbox.minY + 'px';
+            el.style.width = bbox.w + 'px';
+            el.style.height = bbox.h + 'px';
+            
+            // Normalize points for SVG inside the exact bounding box
+            const pointsStr = shape.vertices.map(v => {
+                const pt = getCanvasCoords(v);
+                return `${pt.x - bbox.minX},${pt.y - bbox.minY}`;
+            }).join(' ');
+ 
+            const solidColor = shape.color.replace(/[^,]+(?=\))/, '1'); 
+            
+            el.innerHTML = `
+               <svg viewBox="0 0 ${bbox.w} ${bbox.h}" style="width:100%; height:100%; overflow:visible;">
+                   <polygon points="${pointsStr}" fill="${shape.color}" stroke="${solidColor}" stroke-width="3" vector-effect="non-scaling-stroke"/>
+               </svg>
+               <div class="absolute -top-3 -right-3 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center cursor-pointer text-xs hidden delete-btn z-50">✕</div>
+            `;
+            
+            shape.domElement = el;
+            
+            const deleteBtn = el.querySelector('.delete-btn');
+            // Prevent pointerdown from triggering drag when trying to click delete
+            deleteBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                removeShapeCompletely(shape.id);
+            };
+            
+            // Drag logic using Pointer Events
+            el.addEventListener('pointerdown', (e) => startDrag(e, el, shape));
+            
+            document.getElementById('shape-layer').appendChild(el);
+        }
+ 
+        function removeShapeCompletely(shapeId) {
+            const shapeIndex = createdShapes.findIndex(s => s.id === shapeId);
+            if(shapeIndex > -1) {
+                const shape = createdShapes[shapeIndex];
+                if(shape.domElement && shape.domElement.parentNode) {
+                    shape.domElement.parentNode.removeChild(shape.domElement);
+                }
+                createdShapes.splice(shapeIndex, 1);
+            }
+            for (let i = 0; i < NUM_FORMULA_ROWS; i++) {
+                formulas[i] = formulas[i].filter(item => item.val !== shapeId && item.shapeId !== shapeId);
+            }
+            renderFormulaZones();
+            document.getElementById('feedback-canvas').style.display = 'none';
+        }
+ 
+        function startDrag(e, el, shape) {
+            if (e.button !== 0 && e.type !== 'touchstart' && e.pointerType === 'mouse') return; 
+            e.preventDefault();
+            e.stopPropagation();
+            
+            draggingElement = el;
+            const rect = el.getBoundingClientRect();
+            dragOffset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+            
+            // Remove from formula if it was there
+            for (let i = 0; i < NUM_FORMULA_ROWS; i++) {
+                formulas[i] = formulas[i].filter(item => item.shapeId !== shape.id);
+            }
+            renderFormulaZones();
+            
+            // Break out constraints
+            el.style.position = 'fixed';
+            el.style.zIndex = 1000;
+            el.style.left = (e.clientX - dragOffset.x) + 'px';
+            el.style.top = (e.clientY - dragOffset.y) + 'px';
+            
+            // Restore original dimension sizes during drag
+            const bbox = getBoundingBox(shape.vertices);
+            el.style.width = bbox.w + 'px';
+            el.style.height = bbox.h + 'px';
+            
+            document.body.appendChild(el);
+        }
+ 
+        document.addEventListener('pointermove', (e) => {
+            if (!draggingElement) return;
+            e.preventDefault();
+            draggingElement.style.left = (e.clientX - dragOffset.x) + 'px';
+            draggingElement.style.top = (e.clientY - dragOffset.y) + 'px';
+        });
+ 
+        document.addEventListener('pointerup', (e) => {
+            if (!draggingElement) return;
+            
+            const el = draggingElement;
+            draggingElement = null;
+            
+            const shapeId = el.id;
+            const shape = createdShapes.find(s => s.id === shapeId);
+            if(!shape) return;
+            
+            let droppedInRow = -1;
+            
+            // Dropped in formula zone
+            for (let i = 0; i < NUM_FORMULA_ROWS; i++) {
+                const zone = document.getElementById(`formula-zone-${i}`);
+                const zoneRect = zone.getBoundingClientRect();
+                
+                if (e.clientX >= zoneRect.left && e.clientX <= zoneRect.right &&
+                    e.clientY >= zoneRect.top && e.clientY <= zoneRect.bottom) {
+                    droppedInRow = i;
+                    break;
+                }
+            }
+            
+            if (droppedInRow !== -1) {
+                setActiveRow(droppedInRow);
+                
+                el.style.position = 'relative';
+                el.style.left = '0';
+                el.style.top = '0';
+                el.style.zIndex = '';
+                
+                // Shrink to fit UI
+                el.style.width = '60px';
+                el.style.height = '60px';
+                
+                document.getElementById(`formula-zone-${droppedInRow}`).appendChild(el);
+                
+                formulas[droppedInRow].push({
+                    id: Date.now(),
+                    type: 'shape',
+                    shapeId: shape.id,
+                    shapeData: shape,
+                    domElement: el
+                });
+                
+            } else {
+                // Dropped on board
+                const shapeLayer = document.getElementById('shape-layer');
+                const layerRect = shapeLayer.getBoundingClientRect();
+                
+                el.style.position = 'absolute';
+                el.style.zIndex = '';
+                
+                const bbox = getBoundingBox(shape.vertices);
+                el.style.width = bbox.w + 'px';
+                el.style.height = bbox.h + 'px';
+                
+                // 重新更新 SVG 頂點座標 (以防止拖移期間發生過縮放事件)
+                const pointsStr = shape.vertices.map(v => {
+                    const pt = getCanvasCoords(v);
+                    return `${pt.x - bbox.minX},${pt.y - bbox.minY}`;
+                }).join(' ');
+                const svgBox = el.querySelector('svg');
+                if (svgBox) {
+                    svgBox.setAttribute('viewBox', `0 0 ${bbox.w} ${bbox.h}`);
+                    const polygon = svgBox.querySelector('polygon');
+                    if (polygon) polygon.setAttribute('points', pointsStr);
+                }
+                
+                let newLeft = e.clientX - dragOffset.x - layerRect.left;
+                let newTop = e.clientY - dragOffset.y - layerRect.top;
+                
+                // Snap if close to origin
+                if (Math.abs(newLeft - bbox.minX) < 30 && Math.abs(newTop - bbox.minY) < 30) {
+                    newLeft = bbox.minX;
+                    newTop = bbox.minY;
+                }
+                
+                el.style.left = newLeft + 'px';
+                el.style.top = newTop + 'px';
+                
+                shapeLayer.appendChild(el);
+            }
+            
+            renderFormulaZones();
+            document.getElementById('feedback-canvas').style.display = 'none'; 
+        });
+ 
+        function setActiveRow(index) {
+            activeRow = index;
+            renderFormulaZones();
+        }
+
+        function addOperator(op) {
+            formulas[activeRow].push({
+                id: Date.now(),
+                type: 'operator',
+                val: op
+            });
+            renderFormulaZones();
+            document.getElementById('feedback-canvas').style.display = 'none';
+        }
+ 
+        function removeFormulaItem(id) {
+            for (let i = 0; i < NUM_FORMULA_ROWS; i++) {
+                formulas[i] = formulas[i].filter(item => item.id !== id);
+            }
+            renderFormulaZones();
+            document.getElementById('feedback-canvas').style.display = 'none';
+        }
+ 
+        function renderFormulaZones() {
+            for (let i = 0; i < NUM_FORMULA_ROWS; i++) {
+                const zone = document.getElementById(`formula-zone-${i}`);
+                
+                // Clean up old operators
+                Array.from(zone.children).forEach(child => {
+                    if (child.classList.contains('operator-el')) {
+                        zone.removeChild(child);
+                    }
+                });
+                
+                formulas[i].forEach(item => {
+                    if (item.type === 'shape') {
+                        zone.appendChild(item.domElement);
+                        item.domElement.querySelector('.delete-btn').classList.remove('hidden');
+                    } else {
+                        let el = document.getElementById('op_' + item.id);
+                        if (!el) {
+                            el = document.createElement('div');
+                            el.id = 'op_' + item.id;
+                            el.onclick = (e) => { e.stopPropagation(); removeFormulaItem(item.id); };
+                            
+                            let colorClass = 'text-slate-600 border-slate-200 bg-slate-50';
+                            if (item.val === '+') colorClass = 'text-purple-600 border-purple-200 bg-purple-50';
+                            if (item.val === '-') colorClass = 'text-pink-600 border-pink-200 bg-pink-50';
+                            if (item.val === '×') colorClass = 'text-blue-600 border-blue-200 bg-blue-50';
+                            
+                            el.className = `operator-el cursor-pointer hover:scale-105 transition-transform shrink-0 bounce group relative w-10 h-14 rounded-xl shadow border-2 flex items-center justify-center font-bold text-2xl ${colorClass} mt-2 z-10`;
+                            
+                            el.innerHTML = `<div class="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-red-500 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20 pointer-events-none">點擊刪除</div>${item.val}`;
+                        }
+                        zone.appendChild(el);
+                    }
+                });
+                
+                // Highlight active row
+                if (i === activeRow) {
+                    zone.classList.add('border-teal-400', 'bg-teal-50');
+                    zone.classList.remove('border-slate-300', 'bg-slate-50');
+                } else {
+                    zone.classList.remove('border-teal-400', 'bg-teal-50');
+                    zone.classList.add('border-slate-300', 'bg-slate-50');
+                }
+            }
+            
+            // Hide delete btn for shapes on the canvas
+            createdShapes.forEach(shape => {
+                if(shape.domElement.parentNode && !shape.domElement.parentNode.id.startsWith('formula-zone')) {
+                    shape.domElement.querySelector('.delete-btn').classList.add('hidden');
+                }
+            });
+        }
+ 
+        // --- Evaluation Logic ---
+        function checkSyntax(formula) {
+            let expectOp = false;
+            for (let i = 0; i < formula.length; i++) {
+                let item = formula[i];
+                let isOp = (item.type === 'operator' && ['+','-','×'].includes(item.val));
+                let isVal = (item.type === 'shape' || (item.type === 'operator' && !['+','-','×'].includes(item.val)));
+                
+                if (expectOp && !isOp) return false;
+                if (!expectOp && !isVal) return false;
+                expectOp = !expectOp;
+            }
+            return expectOp; 
+        }
+
+        function calcAlgebraicArea(formula) {
+            let expression = "";
+            formula.forEach(item => {
+                if (item.type === 'shape') {
+                    expression += item.shapeData.area + " ";
+                } else if (item.val === '×') {
+                    expression += "* ";
+                } else {
+                    expression += item.val + " ";
+                }
+            });
+            try {
+                return new Function('return ' + expression)();
+            } catch (e) {
+                return 0;
+            }
+        }
+
+        function evaluateAllFormulas() {
+            let hasValid = false;
+            let hasError = false;
+            let errorMsg = "";
+            let evaluatedCount = 0;
+            
+            // Clear feedback canvas initially
+            fCtx.clearRect(0, 0, feedbackCanvas.width, feedbackCanvas.height);
+            feedbackCanvas.style.display = 'none';
+            feedbackCanvas.classList.remove('blinking-error');
+
+            for (let i = 0; i < NUM_FORMULA_ROWS; i++) {
+                if (formulas[i].length === 0) continue;
+                evaluatedCount++;
+
+                let syntaxOk = checkSyntax(formulas[i]);
+                if (!syntaxOk) {
+                    hasError = true;
+                    errorMsg = `第 ${i+1} 列算式排序有誤，請檢查圖形與符號順序！`;
+                    continue; 
+                }
+
+                let hasMultiplication = formulas[i].some(item => item.val === '×');
+
+                if (hasMultiplication) {
+                    let area = calcAlgebraicArea(formulas[i]);
+                    if (Math.abs(area - questions[currentQuestionIndex].expectedArea) < 0.1) {
+                        hasValid = true;
+                    } else {
+                        hasError = true;
+                        if(!errorMsg) errorMsg = `第 ${i+1} 列算式計算出來的面積不符合目標圖形喔！`;
+                    }
+                } else {
+                    if (checkCoverage(formulas[i])) {
+                        hasValid = true;
+                    } else {
+                        hasError = true;
+                        if(!errorMsg) errorMsg = `第 ${i+1} 列算式無法剛好拼出目標圖形，請看釘板上的紅色提示！`;
+                    }
+                }
+            }
+
+            if (evaluatedCount === 0) {
+                showModal("🤔 還沒有算式喔", "請先將形狀拖拉到底部的算式區，並加上運算符號！", false);
+                return;
+            }
+
+            if (hasValid) {
+                showModal("太棒了！", "你成功列出了正確的算式！🎉", true);
+            } else {
+                showModal("差一點點喔！", errorMsg || "請檢查你的算式是否能正確組合出目標面積。", false);
+            }
+        }
+        
+        function checkCoverage(formulaRow) {
+            const W = 120, H = 120; // Internal validation resolution
+            const logicCanvas = document.createElement('canvas');
+            logicCanvas.width = W; logicCanvas.height = H;
+            const lCtx = logicCanvas.getContext('2d', { willReadFrequently: true });
+            
+            function drawLogicPoly(vertices, color) {
+                lCtx.beginPath();
+                const start = vertices[0];
+                lCtx.moveTo(start.x * 10, (12 - start.y) * 10);
+                for(let i=1; i<vertices.length; i++) {
+                    lCtx.lineTo(vertices[i].x * 10, (12 - vertices[i].y) * 10);
+                }
+                lCtx.closePath();
+                lCtx.fillStyle = color;
+                lCtx.fill();
+            }
+ 
+            // Target Mask
+            lCtx.fillStyle = 'white';
+            lCtx.fillRect(0,0,W,H);
+            drawLogicPoly(questions[currentQuestionIndex].vertices, 'black');
+            const targetImg = lCtx.getImageData(0,0,W,H).data;
+            const targetBuf = new Int8Array(W*H);
+            for(let i=0; i<W*H; i++) targetBuf[i] = (targetImg[i*4] < 128) ? 1 : 0; 
+            
+            // User Build Mask
+            const userBuf = new Int8Array(W*H);
+            let currentOp = '+';
+            
+            formulaRow.forEach(item => {
+                if(item.type === 'operator') {
+                    currentOp = item.val;
+                } else if(item.type === 'shape') {
+                    lCtx.fillStyle = 'white';
+                    lCtx.fillRect(0,0,W,H);
+                    drawLogicPoly(item.shapeData.vertices, 'black');
+                    const shapeImg = lCtx.getImageData(0,0,W,H).data;
+                    for(let i=0; i<W*H; i++) {
+                        if(shapeImg[i*4] < 128) {
+                            userBuf[i] += (currentOp === '+' ? 1 : -1);
+                        }
+                    }
+                    currentOp = '+'; // Default implicit operator is + if missing, handled by syntax check mostly
+                }
+            });
+ 
+            // Map feedback to user UI
+            let errorCount = 0;
+            
+            const scaleX = (feedbackCanvas.width - PADDING*2) / W;
+            const scaleY = (feedbackCanvas.height - PADDING*2) / H;
+ 
+            for(let y=0; y<H; y++) {
+                for(let x=0; x<W; x++) {
+                    const idx = y*W + x;
+                    const isTarget = targetBuf[idx] === 1;
+                    const uCount = userBuf[idx];
+                    
+                    let isError = false; 
+                    
+                    if (isTarget && uCount === 0) {
+                        isError = true; // Missed
+                    } else if (!isTarget && uCount > 0) {
+                        isError = true; // OOB
+                    } else if (isTarget && uCount > 1) {
+                        isError = true; // Double Count
+                    }
+                    if (uCount < 0) {
+                        isError = true; // Over-subtracted
+                    }
+ 
+                    if(isError) {
+                        errorCount++;
+                        const errorColor = [239, 68, 68, 200]; // Unified Red for all errors
+                        
+                        const startX = Math.floor(PADDING + x * scaleX);
+                        const startY = Math.floor(PADDING + y * scaleY);
+                        const blockW = Math.ceil(scaleX);
+                        const blockH = Math.ceil(scaleY);
+                        
+                        fCtx.fillStyle = `rgba(${errorColor[0]}, ${errorColor[1]}, ${errorColor[2]}, ${errorColor[3]/255})`;
+                        fCtx.fillRect(startX, startY, blockW, blockH);
+                    }
+                }
+            }
+ 
+            if (errorCount > 25) {
+                feedbackCanvas.style.display = 'block';
+                feedbackCanvas.classList.add('blinking-error');
+                return false;
+            } else {
+                return true; 
+            }
+        }
+ 
+        // --- UI Modals ---
+        function showModal(title, msg, isSuccess) {
+            document.getElementById('feedback-modal').style.display = 'flex';
+            document.getElementById('feedback-title').innerText = title;
+            document.getElementById('feedback-msg').innerText = msg;
+            
+            const icon = document.getElementById('feedback-icon');
+            const nextBtn = document.getElementById('next-btn');
+            const retryBtn = document.getElementById('retry-btn');
+            const content = document.getElementById('feedback-content');
+ 
+            if (isSuccess) {
+                icon.innerText = "⭐";
+                icon.className = "text-6xl mb-4 pulse-star";
+                nextBtn.style.display = 'block';
+                retryBtn.style.display = 'none';
+                content.className = "bg-white rounded-3xl p-8 max-w-sm w-full mx-4 shadow-2xl text-center transform transition-transform scale-100 border-4 border-green-400";
+            } else {
+                icon.innerText = "💪";
+                icon.className = "text-6xl mb-4";
+                nextBtn.style.display = 'none';
+                retryBtn.style.display = 'block';
+                content.className = "bg-white rounded-3xl p-8 max-w-sm w-full mx-4 shadow-2xl text-center transform transition-transform scale-100 border-4 border-orange-400";
+            }
+        }
+ 
+        function closeModal() {
+            document.getElementById('feedback-modal').style.display = 'none';
+            document.getElementById('feedback-content').classList.replace('scale-100', 'scale-95');
+        }
+ 
+        function nextQuestion() {
+            closeModal();
+            currentQuestionIndex++;
+            loadQuestion();
+        }
+    </script>
+</body>
+</html>
